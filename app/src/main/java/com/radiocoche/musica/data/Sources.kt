@@ -87,15 +87,26 @@ object Sources {
             out.add(Source(Kind.USB, dir, if (usbs.size > 1) "USB${i + 1}" else "USB"))
         }
         if (sd != null) out.add(Source(Kind.SD, sd.second, "Tarjeta SD"))
-        out.add(Source(Kind.INTERNAL, internalRoot(), "Memoria interna"))
+        val custom = ctx.getSharedPreferences("musica", Context.MODE_PRIVATE).getString("internal_folder", null)
+        out.add(Source(Kind.INTERNAL, internalRoot(custom), "Memoria interna"))
         out.add(Source(Kind.BT, File("/"), "Bluetooth"))
         return out
     }
 
-    /** La música de la memoria interna se busca en la carpeta Music (o en la raíz si no existe). */
-    fun internalRoot(): File {
-        @Suppress("DEPRECATION")
-        val base = Environment.getExternalStorageDirectory()
+    /** Raíz de la memoria interna (/storage/emulated/0). */
+    @Suppress("DEPRECATION")
+    fun internalBase(): File = Environment.getExternalStorageDirectory()
+
+    /**
+     * Carpeta de música de la memoria interna: la elegida en Configuración o, por defecto,
+     * la carpeta Music (o la raíz si no existe).
+     */
+    fun internalRoot(custom: String? = null): File {
+        if (!custom.isNullOrEmpty()) {
+            val f = File(custom)
+            if (f.isDirectory) return f
+        }
+        val base = internalBase()
         val music = File(base, "Music")
         return if (music.isDirectory) music else base
     }

@@ -150,6 +150,15 @@ class LibraryDb(ctx: Context) : SQLiteOpenHelper(ctx, "biblioteca.db", null, 1) 
     fun isFav(path: String): Boolean =
         readableDatabase.rawQuery("SELECT 1 FROM favs WHERE path = ?", arrayOf(path)).use { it.moveToFirst() }
 
+    /** Para "Actualizar": se vacía el índice y se vuelve a leer todo. Las favoritas se conservan. */
+    fun clearTracks() {
+        writableDatabase.delete("tracks", null, null)
+    }
+
+    fun clearFavs() {
+        writableDatabase.delete("favs", null, null)
+    }
+
     fun setFav(path: String, on: Boolean) {
         if (on) {
             writableDatabase.insertWithOnConflict("favs", null, ContentValues().apply { put("path", path) }, SQLiteDatabase.CONFLICT_IGNORE)

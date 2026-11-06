@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 import com.radiocoche.musica.ui.DayNight
 import com.radiocoche.musica.ui.LibraryScreen
 import com.radiocoche.musica.ui.PlayerScreen
+import com.radiocoche.musica.ui.SettingsScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -60,12 +61,17 @@ class MainActivity : ComponentActivity() {
         ContextCompat.registerReceiver(this, mountReceiver, mountFilter, ContextCompat.RECEIVER_EXPORTED)
 
         setContent {
-            BackHandler(enabled = vm.screen == Screen.LIBRARY) {
-                if (vm.canGoUp) vm.goUp() else vm.screen = Screen.PLAYER
+            BackHandler(enabled = vm.screen != Screen.PLAYER) {
+                when {
+                    vm.screen == Screen.SETTINGS && vm.picking -> vm.closePicker()
+                    vm.screen == Screen.LIBRARY && vm.canGoUp -> vm.goUp()
+                    else -> vm.screen = Screen.PLAYER
+                }
             }
             when (vm.screen) {
                 Screen.PLAYER -> PlayerScreen(vm)
                 Screen.LIBRARY -> LibraryScreen(vm)
+                Screen.SETTINGS -> SettingsScreen(vm)
             }
         }
 

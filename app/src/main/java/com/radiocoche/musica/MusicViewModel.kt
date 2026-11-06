@@ -40,7 +40,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-enum class Screen { PLAYER, LIBRARY }
+enum class Screen { PLAYER, LIBRARY, SETTINGS }
 enum class LibView(val label: String) { FOLDERS("Carpetas"), ARTISTS("Artistas"), ALBUMS("Álbumes"), SONGS("Canciones"), FAVS("Favoritas") }
 enum class RowKind { FOLDER, ARTIST, ALBUM, SONG }
 
@@ -126,6 +126,29 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     private var reloadJob: Job? = null
     private var indexJob: Job? = null
     private val indexedThisSession = HashSet<String>()
+
+    // ---------- Configuración ----------
+    /** Al arrancar, seguir sonando donde se quedó (si no, se queda en pausa). */
+    var resumeOnStart by mutableStateOf(prefs.getBoolean("resume", true))
+        private set
+    /** true: nombre del archivo; false: título de la etiqueta. */
+    var useFileNames by mutableStateOf(prefs.getString("names", "tag") == "file")
+        private set
+    var internalFolder by mutableStateOf(Sources.internalRoot(prefs.getString("internal_folder", null)).absolutePath)
+        private set
+    var updating by mutableStateOf(false)
+        private set
+    var confirmClearFavs by mutableStateOf(false)
+    var picking by mutableStateOf(false)
+        private set
+    var pickDir by mutableStateOf<File?>(null)
+        private set
+    var pickDirs by mutableStateOf<List<File>>(emptyList())
+        private set
+
+    /** Título a mostrar según la opción "Canciones" de Configuración. */
+    private fun shownTitle(t: Track?, path: String): String =
+        if (useFileNames || t == null) File(path).nameWithoutExtension else t.title
 
     init {
         connect()
@@ -229,7 +252,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             val t: Track = withContext(Dispatchers.IO) { db.get(path) ?: Meta.read(file, current?.root?.absolutePath ?: "") }
             val fav = withContext(Dispatchers.IO) { db.isFav(path) }
             if (now.path != path) return@launch
-            now = now.copy(title = t.title, artist = t.artist, album = t.album)
+            now = now.copy(title = shownTitle(t, path), artist = t.artist, album = t.album)
             favorite = fav
             if (t.duration > 0 && (c.duration == C.TIME_UNSET || c.duration <= 0)) durationMs = t.duration
             val bmp = withContext(Dispatchers.IO) { Meta.cover(file) }
@@ -319,7 +342,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             val src = found.firstOrNull { it.id == lastId && it.kind != Kind.BT }
                 ?: found.firstOrNull { it.kind == Kind.USB }
                 ?: found.firstOrNull { it.kind == Kind.INTERNAL }
-            if (src != null) startSource(src, autoplay = lastId == null || prefs.getBoolean("was_playing", true))
+            if (src != null) startSource(src, autoplay = resumeOnStart && (lastId == null || prefs.getBoolean("was_playing", true)))
             startIndexing()
         }
     }
@@ -382,6 +405,20 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun previous() = controller?.seekToPrevious() ?: Unit
+
+    /** Deslizar a la izquierda: siguiente canción (vuelve a la primera al llegar al final). */
+    fun swipeNext() {
+        val c = controller ?: return
+        if (c.mediaItemCount == 0) return
+        if (c.hasNextMediaItem()) c.seekToNextMediaItem() else c.seekTo(0, 0L)
+    }
+
+    /** Deslizar a la derecha: canción anterior (siempre la anterior, aunque la actual vaya avanzada). */
+    fun swipePrevious() {
+        val c = controller ?: return
+        if (c.mediaItemCount == 0) return
+        if (c.hasPreviousMediaItem()) c.seekToPreviousMediaItem() else c.seekTo(c.mediaItemCount - 1, 0L)
+    }
     fun next() = controller?.seekToNext() ?: Unit
 
     fun seekBy(deltaMs: Long) {
@@ -469,6 +506,97 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             if (runCatching { ctx.startActivity(i) }.isSuccess) return true
         }
         return false
+    }
+
+    // ---------- Configuración ----------
+
+    fun openSettings() {
+        screen = Screen.SETTINGS
+    }
+
+    fun toggleResume() {
+        val v = !resumeOnStart
+        resumeOnStart = v
+        prefs.edit().putBoolean("resume", v).apply()
+        showToast(if (v) "Reanudará la música al arrancar" else "Esperará a que pulses Play")
+    }
+
+    fun setFileNames(v: Boolean) {
+        if (v == useFileNames) return
+        useFileNames = v
+        prefs.edit().putString("names", if (v) "file" else "tag").apply()
+        updateNow()
+        reload()
+    }
+
+    fun openPicker() {
+        picking = true
+        browse(Sources.internalBase())
+    }
+
+    fun closePicker() {
+        picking = false
+    }
+
+    fun browse(dir: File) {
+        pickDir = dir
+        viewModelScope.launch {
+            pickDirs = withContext(Dispatchers.IO) { listFolder(dir).first.filter { it.name != "Android" } }
+        }
+    }
+
+    fun pickUp() {
+        val d = pickDir ?: return
+        val base = Sources.internalBase()
+        if (d.absolutePath == base.absolutePath) return
+        browse(d.parentFile ?: base)
+    }
+
+    /** Ruta de la carpeta que se está viendo en el selector, desde la raíz de la memoria interna. */
+    fun pickLabel(): String {
+        val d = pickDir ?: return ""
+        return d.absolutePath.removePrefix(Sources.internalBase().absolutePath)
+    }
+
+    fun canPickUp(): Boolean = pickDir != null && pickDir?.absolutePath != Sources.internalBase().absolutePath
+
+    fun useThisFolder() {
+        val d = pickDir ?: return
+        picking = false
+        prefs.edit().putString("internal_folder", d.absolutePath).apply()
+        internalFolder = d.absolutePath
+        showToast("Carpeta de música: " + d.absolutePath.removePrefix(Sources.internalBase().absolutePath).ifEmpty { "/" })
+        refreshSources()
+    }
+
+    fun internalFolderLabel(): String =
+        internalFolder.removePrefix(Sources.internalBase().absolutePath).ifEmpty { "/" }
+
+    /** "Actualizar": vuelve a leer todas las canciones de las fuentes conectadas. */
+    fun updateLibrary() {
+        if (updating) return
+        updating = true
+        viewModelScope.launch {
+            indexJob?.cancel()
+            indexJob?.join()
+            withContext(Dispatchers.IO) { db.clearTracks() }
+            indexedThisSession.clear()
+            startIndexing()
+            indexJob?.join()
+            updating = false
+            showToast("Biblioteca actualizada")
+            updateNow()
+        }
+    }
+
+    fun clearFavorites() {
+        confirmClearFavs = false
+        favorite = false
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { db.clearFavs() }
+            if (libView == LibView.FAVS) reload()
+        }
+        showToast("Favoritas borradas")
     }
 
     fun showToast(msg: String) {
@@ -588,7 +716,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun songRows(list: List<Track>): Pair<List<LibRow>, List<String>> {
         val rows = list.mapIndexed { i, t ->
-            LibRow(RowKind.SONG, t.title, "${t.artist} · ${t.album}", fmt(t.duration), t.path, i)
+            LibRow(RowKind.SONG, shownTitle(t, t.path), "${t.artist} · ${t.album}", fmt(t.duration), t.path, i)
         }
         return rows to list.map { it.path }
     }
@@ -608,7 +736,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
                     r.add(
                         LibRow(
                             RowKind.SONG,
-                            t?.title ?: f.nameWithoutExtension,
+                            shownTitle(t, f.absolutePath),
                             if (t != null) "${t.artist} · ${t.album}" else "",
                             if (t != null) fmt(t.duration) else "",
                             f.absolutePath,

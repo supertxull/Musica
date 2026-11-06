@@ -9,6 +9,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -50,25 +58,8 @@ fun PlayerScreen(vm: MusicViewModel) {
             Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // ---------- Centro: anterior · carátula y datos · siguiente ----------
-            Row(
-                Modifier.weight(1f).fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                CarButton(
-                    Modifier.width(96.dp).height(150.dp),
-                    BtnStyle(p.panel, p.border2, p.text),
-                    radius = 22.dp,
-                    onHold = { vm.seekBy(-5000) },
-                    onClick = { vm.previous() },
-                ) { CarIcon(Ic.Prev, 44.dp, p.text, "Canción anterior") }
-
-                Row(
-                    Modifier.weight(1f).padding(start = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(28.dp),
-                ) {
+            // ---------- Centro: carátula y datos. Se desliza para cambiar de canción ----------
+            SwipeArea(vm, Modifier.weight(1f).fillMaxWidth()) {
                     Cover(vm)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -113,15 +104,6 @@ fun PlayerScreen(vm: MusicViewModel) {
                             }
                         }
                     }
-                }
-
-                CarButton(
-                    Modifier.width(96.dp).height(150.dp),
-                    BtnStyle(p.panel, p.border2, p.text),
-                    radius = 22.dp,
-                    onHold = { vm.seekBy(5000) },
-                    onClick = { vm.next() },
-                ) { CarIcon(Ic.Next, 44.dp, p.text, "Canción siguiente") }
             }
 
             // ---------- Barra de progreso ----------
@@ -148,7 +130,7 @@ fun PlayerScreen(vm: MusicViewModel) {
                 CarButton(Modifier.weight(1f).fillMaxHeight(), panelStyle(), onClick = { vm.openEq() }) {
                     CarIcon(Ic.Eq, 30.dp, p.text, "Ecualizador")
                 }
-                CarButton(Modifier.weight(1f).fillMaxHeight(), panelStyle(), onClick = { vm.showToast("Configuración de Música (próximamente)") }) {
+                CarButton(Modifier.weight(1f).fillMaxHeight(), panelStyle(), onClick = { vm.openSettings() }) {
                     CarIcon(Ic.Gear, 32.dp, p.text, "Configuración")
                 }
             }
@@ -164,6 +146,62 @@ private fun shortLabel(label: String?): String = when (label) {
     else -> label
 }
 
+/**
+ * Zona central deslizable, como las presintonías de la radio:
+ * hacia la izquierda, canción siguiente; hacia la derecha, la anterior.
+ */
+@Composable
+private fun SwipeArea(vm: MusicViewModel, modifier: Modifier, content: @Composable RowScope.() -> Unit) {
+    val scope = rememberCoroutineScope()
+    val offset = remember { Animatable(0f) }
+    var widthPx by remember { mutableStateOf(1f) }
+    val tracker = remember { VelocityTracker() }
+    Box(
+        modifier
+            .onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { tracker.resetTracking() },
+                    onDragEnd = {
+                        val v = tracker.calculateVelocity().x
+                        scope.launch {
+                            val dx = offset.value
+                            val dir = when {
+                                dx < -widthPx * 0.18f || (v < -900f && dx < 0) -> 1
+                                dx > widthPx * 0.18f || (v > 900f && dx > 0) -> -1
+                                else -> 0
+                            }
+                            if (dir == 0) {
+                                offset.animateTo(0f, tween(170))
+                            } else {
+                                offset.animateTo(-dir * widthPx, tween(170))
+                                if (dir > 0) vm.swipeNext() else vm.swipePrevious()
+                                offset.snapTo(dir * widthPx * 0.6f)
+                                offset.animateTo(0f, tween(170))
+                            }
+                        }
+                    },
+                    onDragCancel = { scope.launch { offset.animateTo(0f, tween(170)) } },
+                ) { change, amount ->
+                    change.consume()
+                    tracker.addPosition(change.uptimeMillis, change.position)
+                    scope.launch { offset.snapTo(offset.value + amount) }
+                }
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp).graphicsLayer {
+                translationX = offset.value
+                alpha = (1f - abs(offset.value) / 900f).coerceAtLeast(0.35f)
+            },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(36.dp),
+            content = content,
+        )
+    }
+}
+
 @Composable
 private fun ModeButton(on: Boolean, onClick: () -> Unit, content: @Composable (Color) -> Unit) {
     val p = Tema.p
@@ -176,13 +214,13 @@ private fun Cover(vm: MusicViewModel) {
     val p = Tema.p
     val shape = RoundedCornerShape(22.dp)
     val bmp = vm.cover
-    val base = Modifier.size(220.dp).clip(shape).border(1.dp, p.border2, shape)
+    val base = Modifier.size(320.dp).clip(shape).border(1.dp, p.border2, shape)
     if (bmp != null) {
         Image(bmp, contentDescription = "Carátula", contentScale = ContentScale.Crop, modifier = base)
     } else {
         val album = vm.now.album.ifEmpty { vm.now.folder }
         Box(base.background(albumColor(album)), contentAlignment = Alignment.Center) {
-            Text(initials(album), color = Color(0xE6FFFFFF), fontSize = 72.sp, fontFamily = Tema.condensed)
+            Text(initials(album), color = Color(0xE6FFFFFF), fontSize = 104.sp, fontFamily = Tema.condensed)
         }
     }
 }
