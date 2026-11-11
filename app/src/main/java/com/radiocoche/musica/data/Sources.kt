@@ -86,7 +86,7 @@ object Sources {
         usbs.forEachIndexed { i, (_, dir) ->
             out.add(Source(Kind.USB, dir, if (usbs.size > 1) "USB${i + 1}" else "USB"))
         }
-        if (sd != null) out.add(Source(Kind.SD, sd.second, "Tarjeta SD"))
+        if (sd != null) out.add(Source(Kind.SD, sd.second, "SD"))
         val custom = ctx.getSharedPreferences("musica", Context.MODE_PRIVATE).getString("internal_folder", null)
         out.add(Source(Kind.INTERNAL, internalRoot(custom), "Memoria interna"))
         out.add(Source(Kind.BT, File("/"), "Bluetooth"))

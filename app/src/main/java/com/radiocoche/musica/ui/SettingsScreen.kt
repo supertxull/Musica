@@ -260,7 +260,7 @@ private fun FolderPicker(vm: MusicViewModel) {
                 }
             }
             CarButton(Modifier.fillMaxWidth().height(60.dp), accentStyle(), onClick = { vm.useThisFolder() }) {
-                Text("Usar esta carpeta", color = p.onAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("Usar esta carpeta", color = p.accent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

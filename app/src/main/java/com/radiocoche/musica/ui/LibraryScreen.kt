@@ -51,7 +51,7 @@ fun LibraryScreen(vm: MusicViewModel) {
                     CarIcon(Ic.Back, 30.dp, p.text, "Volver al reproductor")
                 }
                 SourceButton(vm, Kind.USB, vm.usbLabel())
-                SourceButton(vm, Kind.SD, "Tarjeta SD")
+                SourceButton(vm, Kind.SD, "SD")
                 SourceButton(vm, Kind.INTERNAL, "Memoria interna")
                 SourceButton(vm, Kind.BT, "Bluetooth")
             }
@@ -99,8 +99,8 @@ fun LibraryScreen(vm: MusicViewModel) {
                         if (songs > 0) {
                             CarButton(Modifier.height(48.dp).width(200.dp), accentStyle(), radius = 12.dp, onClick = { vm.playAll() }) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    CarIcon(Ic.Play, 18.dp, p.onAccent)
-                                    Text("Reproducir todo", color = p.onAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                    CarIcon(Ic.Play, 18.dp, p.accent)
+                                    Text("Reproducir todo", color = p.accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -142,7 +142,7 @@ fun LibraryScreen(vm: MusicViewModel) {
                     }
                 }
                 CarButton(Modifier.width(140.dp).fillMaxHeight(), if (vm.playing) accentStyle() else panelStyle(), onClick = { vm.togglePlay() }) {
-                    CarIcon(if (vm.playing) Ic.Pause else Ic.Play, 34.dp, if (vm.playing) p.onAccent else p.text, if (vm.playing) "Pausa" else "Reproducir")
+                    CarIcon(if (vm.playing) Ic.Pause else Ic.Play, 34.dp, if (vm.playing) p.accent else p.text, if (vm.playing) "Pausa" else "Reproducir")
                 }
                 CarButton(Modifier.width(110.dp).fillMaxHeight(), panelStyle(), onClick = { vm.next() }) {
                     CarIcon(Ic.Next, 32.dp, p.text, "Canción siguiente")

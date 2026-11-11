@@ -342,7 +342,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             val src = found.firstOrNull { it.id == lastId && it.kind != Kind.BT }
                 ?: found.firstOrNull { it.kind == Kind.USB }
                 ?: found.firstOrNull { it.kind == Kind.INTERNAL }
-            if (src != null) startSource(src, autoplay = resumeOnStart && (lastId == null || prefs.getBoolean("was_playing", true)))
+            if (src != null) startSource(src, autoplay = resumeOnStart)
             startIndexing()
         }
     }
@@ -517,7 +517,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleResume() {
         val v = !resumeOnStart
         resumeOnStart = v
-        prefs.edit().putBoolean("resume", v).apply()
+        prefs.edit().putBoolean("resume", v).apply()  // también la lee el servicio al despertar la unidad
         showToast(if (v) "Reanudará la música al arrancar" else "Esperará a que pulses Play")
     }
 

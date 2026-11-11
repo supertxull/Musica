@@ -52,7 +52,7 @@ object Meta {
         }
         if (bytes != null) {
             val embedded = decode(maxPx) { o -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o) }
-            if (embedded != null) return embedded
+            if (embedded != null) return trimMargins(embedded)
         }
 
         val dir = file.parentFile ?: return null
@@ -62,7 +62,43 @@ object Meta {
             val e = f.extension.lowercase()
             (e == "jpg" || e == "jpeg" || e == "png") && names.any { n.startsWith(it) }
         } ?: return null
-        return decode(maxPx) { o -> BitmapFactory.decodeFile(img.absolutePath, o) }
+        return decode(maxPx) { o -> BitmapFactory.decodeFile(img.absolutePath, o) }?.let { trimMargins(it) }
+    }
+
+    /**
+     * Quita los márgenes lisos blancos o negros que traen algunas carátulas
+     * (marcos o bandas), para que la portada rellene todo el cuadro.
+     */
+    fun trimMargins(b: Bitmap): Bitmap {
+        val w = b.width
+        val h = b.height
+        if (w < 32 || h < 32) return b
+        val px = IntArray(w * h)
+        b.getPixels(px, 0, w, 0, 0, w, h)
+
+        fun lum(c: Int) = ((c shr 16 and 0xFF) * 3 + (c shr 8 and 0xFF) * 6 + (c and 0xFF)) / 10
+        // Liso: casi blanco o casi negro, con algo de margen para el ruido del JPG.
+        fun plain(c: Int): Int = when (lum(c)) { in 232..255 -> 1; in 0..22 -> 2; else -> 0 }
+
+        val kind = plain(px[0]).takeIf { it != 0 } ?: plain(px[w * h - 1]).takeIf { it != 0 } ?: return b
+        fun ok(c: Int) = plain(c) == kind
+        fun rowPlain(y: Int): Boolean { var n = 0; for (x in 0 until w) if (!ok(px[y * w + x])) n++; return n <= w / 50 }
+        fun colPlain(x: Int, y0: Int, y1: Int): Boolean { var n = 0; for (y in y0 until y1) if (!ok(px[y * w + x])) n++; return n <= (y1 - y0) / 50 }
+
+        var top = 0
+        while (top < h / 2 && rowPlain(top)) top++
+        var bottom = h
+        while (bottom > top + 1 && rowPlain(bottom - 1)) bottom--
+        var left = 0
+        while (left < w / 2 && colPlain(left, top, bottom)) left++
+        var right = w
+        while (right > left + 1 && colPlain(right - 1, top, bottom)) right--
+
+        val cw = right - left
+        val ch = bottom - top
+        // Nada que recortar, o la portada es casi toda blanca/negra: se deja como está.
+        if ((cw == w && ch == h) || cw < w * 0.3 || ch < h * 0.3) return b
+        return runCatching { Bitmap.createBitmap(b, left, top, cw, ch) }.getOrDefault(b)
     }
 
     private inline fun decode(maxPx: Int, load: (BitmapFactory.Options) -> Bitmap?): Bitmap? = try {

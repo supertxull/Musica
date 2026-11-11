@@ -1,6 +1,14 @@
 package com.radiocoche.musica.playback
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import androidx.core.content.ContextCompat
+import androidx.media3.common.Player
 import android.net.Uri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -21,6 +29,40 @@ import java.io.File
 class PlaybackService : MediaSessionService() {
 
     private var session: MediaSession? = null
+    private val handler = Handler(Looper.getMainLooper())
+
+    /** Momento en que la música sonaba por última vez (para saber si sonaba al apagar el coche). */
+    private var lastPlayingAt = 0L
+    private var resumeOnWake = false
+
+    /**
+     * Reanudar al arrancar cuando la unidad despierta del reposo (sin reiniciar la app).
+     * Al apagar, la unidad pausa la música justo antes de apagar la pantalla; si sonaba
+     * en los segundos previos, al volver a encender la pantalla se reanuda.
+     * Si estabas escuchando la radio, la música no estaba sonando y no se reanuda.
+     */
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val player = session?.player ?: return
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    resumeOnWake = player.isPlaying || SystemClock.elapsedRealtime() - lastPlayingAt < 15_000
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    val enabled = getSharedPreferences("musica", Context.MODE_PRIVATE).getBoolean("resume", true)
+                    if (enabled && resumeOnWake && player.mediaItemCount > 0) {
+                        handler.postDelayed({
+                            if (!player.isPlaying) {
+                                if (player.playbackState == Player.STATE_IDLE) player.prepare()
+                                player.play()
+                            }
+                        }, 1500)
+                    }
+                    resumeOnWake = false
+                }
+            }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -34,6 +76,16 @@ class PlaybackService : MediaSessionService() {
             )
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
+        player.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                lastPlayingAt = SystemClock.elapsedRealtime()
+            }
+        })
+        ContextCompat.registerReceiver(
+            this, screenReceiver,
+            IntentFilter().apply { addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_SCREEN_OFF) },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
 
         session = MediaSession.Builder(this, player)
             .setCallback(object : MediaSession.Callback {
@@ -61,6 +113,8 @@ class PlaybackService : MediaSessionService() {
     override fun onTaskRemoved(rootIntent: Intent?) {}
 
     override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        runCatching { unregisterReceiver(screenReceiver) }
         session?.run {
             player.release()
             release()

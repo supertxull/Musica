@@ -1,6 +1,9 @@
 package com.radiocoche.musica.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.runtime.key
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -50,6 +53,7 @@ import androidx.media3.common.Player
 import com.radiocoche.musica.MusicViewModel
 import com.radiocoche.musica.data.Kind
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PlayerScreen(vm: MusicViewModel) {
     val p = Tema.p
@@ -76,12 +80,21 @@ fun PlayerScreen(vm: MusicViewModel) {
                                 )
                             }
                         }
-                        Text(
-                            vm.now.title.ifEmpty { "Sin música" },
-                            color = p.text, fontSize = 76.sp, lineHeight = 90.sp, fontFamily = Tema.condensed,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(bottom = 4.dp),
-                        )
+                        // Si el título no cabe: espera dos segundos y se desplaza sin parar,
+                        // con dos segundos de pausa antes de cada vuelta. Empieza de nuevo con cada canción.
+                        key(vm.now.path) {
+                            Text(
+                                vm.now.title.ifEmpty { "Sin música" },
+                                color = p.text, fontSize = 76.sp, lineHeight = 90.sp, fontFamily = Tema.condensed,
+                                maxLines = 1, softWrap = false,
+                                modifier = Modifier.padding(bottom = 4.dp).basicMarquee(
+                                    iterations = Int.MAX_VALUE,
+                                    initialDelayMillis = 2000,
+                                    repeatDelayMillis = 2000,
+                                    velocity = 70.dp,
+                                ),
+                            )
+                        }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             CarIcon(Ic.Person, 24.dp, p.accent)
                             Text(vm.now.artist, color = p.text, fontSize = 28.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -124,7 +137,7 @@ fun PlayerScreen(vm: MusicViewModel) {
                     if (vm.playing) accentStyle() else panelStyle(),
                     onClick = { vm.togglePlay() },
                 ) {
-                    val tint = if (vm.playing) p.onAccent else p.text
+                    val tint = if (vm.playing) p.accent else p.text
                     CarIcon(if (vm.playing) Ic.Pause else Ic.Play, 36.dp, tint, if (vm.playing) "Pausa" else "Reproducir")
                 }
                 CarButton(Modifier.weight(1f).fillMaxHeight(), panelStyle(), onClick = { vm.openEq() }) {
@@ -216,7 +229,7 @@ private fun Cover(vm: MusicViewModel) {
     val bmp = vm.cover
     val base = Modifier.size(320.dp).clip(shape).border(1.dp, p.border2, shape)
     if (bmp != null) {
-        Image(bmp, contentDescription = "Carátula", contentScale = ContentScale.Crop, modifier = base)
+        Image(bmp, contentDescription = "Carátula", contentScale = ContentScale.Crop, modifier = base.background(Color.Black))
     } else {
         val album = vm.now.album.ifEmpty { vm.now.folder }
         Box(base.background(albumColor(album)), contentAlignment = Alignment.Center) {

@@ -12,8 +12,8 @@ android {
         applicationId = "com.radiocoche.musica"
         minSdk = 21
         targetSdk = 34
-        versionCode = 3
-        versionName = "0.3"
+        versionCode = 4
+        versionName = "0.4"
     }
 
     // Misma firma fija que la app Radio (archivo app/radio.keystore copiado de su repositorio).

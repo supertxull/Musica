@@ -29,10 +29,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Estilo de un botón: fondo, borde y color del contenido. */
-data class BtnStyle(val bg: Color, val border: Color?, val fg: Color, val dashed: Boolean = false)
+data class BtnStyle(val bg: Color, val border: Color?, val fg: Color, val dashed: Boolean = false, val borderWidth: Dp = 1.dp)
 
 fun panelStyle() = BtnStyle(Tema.p.panel, Tema.p.border, Tema.p.text)
-fun accentStyle() = BtnStyle(Tema.p.accent, null, Tema.p.onAccent)
+/** Botón activo: fondo gris como los demás, con borde y contenido en naranja. */
+fun accentStyle() = BtnStyle(Tema.p.panel, Tema.p.accent, Tema.p.accent, borderWidth = 2.dp)
 
 /**
  * Botón genérico del coche. Con [onHold] se repite mientras se mantiene pulsado
@@ -53,7 +54,7 @@ fun CarButton(
     val click by rememberUpdatedState(onClick)
     val hold by rememberUpdatedState(onHold)
     var m = modifier.clip(shape).background(style.bg, shape)
-    if (style.border != null) m = m.border(1.dp, style.border, shape)
+    if (style.border != null) m = m.border(style.borderWidth, style.border, shape)
     if (enabled) {
         m = m.pointerInput(Unit) {
             detectTapGestures(
