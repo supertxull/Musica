@@ -60,4 +60,5 @@ object Ic {
     val Disc = icon("disc", P("M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"), P("M9.5 12a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0"))
     val Folder = icon("folder", P("M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"))
     val Back = icon("back", P("M15 5l-7 7 7 7", w = 2.4f))
+    val Note = icon("note", P("M9 18V5l11-2v13", w = 1.8f), P("M3 18a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", w = 1.8f), P("M14 16a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", w = 1.8f))
 }

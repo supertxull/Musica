@@ -26,6 +26,8 @@ import com.radiocoche.musica.data.Indexer
 import com.radiocoche.musica.data.Kind
 import com.radiocoche.musica.data.LibraryDb
 import com.radiocoche.musica.data.Meta
+import com.radiocoche.musica.data.Lyrics
+import com.radiocoche.musica.data.LyricsReader
 import com.radiocoche.musica.data.Source
 import com.radiocoche.musica.data.Sources
 import com.radiocoche.musica.data.Track
@@ -98,6 +100,19 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     var toast by mutableStateOf("")
         private set
 
+    // ---------- Letra ----------
+    /** Letra de la canción actual, leída del propio archivo (null si no tiene). */
+    var lyrics by mutableStateOf<Lyrics?>(null)
+        private set
+    /** true: se ve la letra en lugar de la carátula. */
+    var showLyrics by mutableStateOf(false)
+        private set
+
+    fun toggleLyrics() {
+        if (current?.kind == Kind.BT || now.path.isEmpty()) return
+        showLyrics = !showLyrics
+    }
+
     // ---------- Biblioteca ----------
     var libSource by mutableStateOf<Source?>(null)
         private set
@@ -155,15 +170,15 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             var tick = 0
             while (isActive) {
-                delay(500)
+                delay(250)
                 controller?.let { c ->
                     positionMs = c.currentPosition.coerceAtLeast(0)
                     val d = c.duration
                     if (d != C.TIME_UNSET && d > 0) durationMs = d
                 }
                 tick++
-                if (tick % 10 == 0) savePosition()
-                if (tick % 10 == 5 && hasPermission) refreshSources()
+                if (tick % 20 == 0) savePosition()
+                if (tick % 20 == 10 && hasPermission) refreshSources()
             }
         }
     }
@@ -240,6 +255,11 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         val index = c.currentMediaItemIndex
         val count = c.mediaItemCount
         val file = File(path)
+        // Al cambiar de canción se vuelve a la carátula.
+        if (path != now.path) {
+            showLyrics = false
+            lyrics = null
+        }
         now = NowPlaying(
             path = path,
             title = file.nameWithoutExtension,
@@ -255,6 +275,8 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
             now = now.copy(title = shownTitle(t, path), artist = t.artist, album = t.album)
             favorite = fav
             if (t.duration > 0 && (c.duration == C.TIME_UNSET || c.duration <= 0)) durationMs = t.duration
+            val ly = withContext(Dispatchers.IO) { LyricsReader.read(file) }
+            if (now.path == path) lyrics = ly
             val bmp = withContext(Dispatchers.IO) { Meta.cover(file) }
             if (now.path == path) cover = bmp?.asImageBitmap()
         }

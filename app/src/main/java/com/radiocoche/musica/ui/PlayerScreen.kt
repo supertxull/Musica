@@ -2,6 +2,11 @@ package com.radiocoche.musica.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.runtime.key
 import androidx.compose.foundation.background
@@ -64,6 +69,9 @@ fun PlayerScreen(vm: MusicViewModel) {
         ) {
             // ---------- Centro: carátula y datos. Se desliza para cambiar de canción ----------
             SwipeArea(vm, Modifier.weight(1f).fillMaxWidth()) {
+                if (vm.showLyrics) {
+                    LyricsPanel(vm, Modifier.weight(1f).height(400.dp))
+                } else {
                     Cover(vm)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -117,6 +125,7 @@ fun PlayerScreen(vm: MusicViewModel) {
                             }
                         }
                     }
+                }
             }
 
             // ---------- Barra de progreso ----------
@@ -228,6 +237,7 @@ private fun Cover(vm: MusicViewModel) {
     val shape = RoundedCornerShape(22.dp)
     val bmp = vm.cover
     val base = Modifier.size(320.dp).clip(shape).border(1.dp, p.border2, shape)
+        .pointerInput(Unit) { detectTapGestures { vm.toggleLyrics() } }
     if (bmp != null) {
         Image(bmp, contentDescription = "Carátula", contentScale = ContentScale.Crop, modifier = base.background(Color.Black))
     } else {
@@ -292,5 +302,69 @@ private fun ProgressPanel(vm: MusicViewModel) {
             ) { Box(Modifier.size(24.dp).clip(CircleShape).background(p.accent)) }
         }
         Text(fmt(dur), color = p.muted, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(64.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+    }
+}
+
+/**
+ * Letra de la canción a todo el ancho. Al tocarla, vuelve la carátula.
+ * Sincronizada: avanza sola con la línea actual en naranja, centrada.
+ * Sin tiempos: el texto completo, para desplazarlo con el dedo.
+ */
+@Composable
+private fun LyricsPanel(vm: MusicViewModel, modifier: Modifier) {
+    val p = Tema.p
+    val shape = RoundedCornerShape(22.dp)
+    val ly = vm.lyrics
+    Box(
+        modifier.clip(shape).background(p.panel).border(1.dp, p.border2, shape)
+            .pointerInput(Unit) { detectTapGestures { vm.toggleLyrics() } },
+    ) {
+        when {
+            ly == null || ly.lines.isEmpty() -> Column(
+                Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                CarIcon(Ic.Note, 40.dp, p.muted)
+                Text("Esta canción no tiene letra", color = p.muted, fontSize = 22.sp)
+            }
+
+            ly.synced -> {
+                val lines = ly.lines
+                val pos = vm.positionMs
+                var cur = 0
+                for (i in lines.indices) if ((lines[i].timeMs ?: 0L) <= pos) cur = i
+                val lineH = 62.dp
+                val target = with(LocalDensity.current) { (200.dp - lineH / 2 - lineH * cur).toPx() }
+                val shift by animateFloatAsState(target, tween(400), label = "letra")
+                Column(Modifier.fillMaxWidth().graphicsLayer { translationY = shift }) {
+                    lines.forEachIndexed { i, l ->
+                        val on = i == cur
+                        Box(Modifier.fillMaxWidth().height(lineH).padding(horizontal = 40.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                l.text,
+                                color = if (on) p.accent else p.dim,
+                                fontSize = if (on) 46.sp else 30.sp,
+                                fontFamily = if (on) Tema.condensed else null,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                }
+            }
+
+            else -> Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 40.dp, vertical = 70.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                ly.lines.forEach { l ->
+                    Text(l.text.ifEmpty { " " }, color = p.text, fontSize = 30.sp, lineHeight = 40.sp, textAlign = TextAlign.Center)
+                }
+            }
+        }
+        // Difuminado arriba y abajo.
+        Box(Modifier.fillMaxWidth().height(90.dp).align(Alignment.TopCenter).background(Brush.verticalGradient(listOf(p.panel, Color.Transparent))))
+        Box(Modifier.fillMaxWidth().height(90.dp).align(Alignment.BottomCenter).background(Brush.verticalGradient(listOf(Color.Transparent, p.panel))))
     }
 }
