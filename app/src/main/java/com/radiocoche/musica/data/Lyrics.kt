@@ -12,7 +12,8 @@ data class Lyrics(val lines: List<LyricLine>) {
 }
 
 /**
- * Lee la letra guardada dentro del propio archivo de música.
+ * Lee la letra de una canción. Primero la que va dentro del propio archivo y, si no tiene,
+ * la de un archivo .lrc con el mismo nombre en la misma carpeta (Canción.mp3 → Canción.lrc).
  *
  * - MP3: etiquetas ID3v2 USLT (letra) y SYLT (letra sincronizada).
  * - FLAC: comentarios LYRICS / UNSYNCEDLYRICS.
@@ -23,14 +24,33 @@ data class Lyrics(val lines: List<LyricLine>) {
  */
 object LyricsReader {
 
-    fun read(file: File): Lyrics? = runCatching {
+    fun read(file: File): Lyrics? = readEmbedded(file) ?: readSidecar(file)
+
+    private fun Lyrics?.useful(): Lyrics? = this?.takeIf { it.lines.any { l -> l.text.isNotBlank() } }
+
+    private fun readEmbedded(file: File): Lyrics? = runCatching {
         when (file.extension.lowercase()) {
             "mp3" -> readId3(file)
             "flac" -> readFlac(file)
             "m4a", "mp4", "aac", "alac" -> readMp4(file)
             else -> readId3(file)
         }
-    }.getOrNull()?.takeIf { it.lines.any { l -> l.text.isNotBlank() } }
+    }.getOrNull().useful()
+
+    /** Archivo .lrc con el mismo nombre que la canción, en su misma carpeta (sin distinguir mayúsculas). */
+    private fun readSidecar(file: File): Lyrics? = runCatching {
+        val dir = file.parentFile ?: return null
+        val want = file.nameWithoutExtension + ".lrc"
+        val lrc = File(dir, want).takeIf { it.isFile }
+            ?: dir.listFiles()?.firstOrNull { it.isFile && it.name.equals(want, ignoreCase = true) }
+            ?: return null
+        if (lrc.length() > 512 * 1024) return null
+        val bytes = lrc.readBytes()
+        // Normalmente UTF-8; si no lo es, los .lrc antiguos suelen venir en Windows-1252.
+        var text = String(bytes, Charsets.UTF_8)
+        if (text.contains('\uFFFD')) text = String(bytes, Charset.forName("windows-1252"))
+        parseText(text.removePrefix("\uFEFF"))
+    }.getOrNull().useful()
 
     // ---------- Texto LRC ----------
 

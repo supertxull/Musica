@@ -326,7 +326,7 @@ private fun LyricsPanel(vm: MusicViewModel, modifier: Modifier) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 CarIcon(Ic.Note, 40.dp, p.muted)
-                Text("Esta canción no tiene letra", color = p.muted, fontSize = 22.sp)
+                Text("Letra no disponible", color = p.text, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
             }
 
             ly.synced -> {
