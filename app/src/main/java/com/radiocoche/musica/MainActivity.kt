@@ -45,6 +45,15 @@ class MainActivity : ComponentActivity() {
         vm.onPermission(hasReadPermission())
     }
 
+
+    /** Mira el modo día/noche cada pocos segundos mientras la app está a la vista. */
+    private val dayNightPoll = object : Runnable {
+        override fun run() {
+            DayNight.apply()
+            mainHandler.postDelayed(this, DayNight.POLL_MS)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         DayNight.apply()
@@ -80,13 +89,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        DayNight.apply()
+        mainHandler.removeCallbacks(dayNightPoll)
+        dayNightPoll.run()
         if (hasReadPermission()) {
             if (!vm.hasPermission) vm.onPermission(true) else vm.refreshSources()
         }
     }
 
+    override fun onPause() {
+        mainHandler.removeCallbacks(dayNightPoll)
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        mainHandler.removeCallbacksAndMessages(null)
         runCatching { unregisterReceiver(dayNightReceiver) }
         runCatching { unregisterReceiver(mountReceiver) }
         super.onDestroy()
