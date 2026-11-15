@@ -29,8 +29,8 @@ val NightPalette = Palette(
     bg = Color(0xFF0B0E13), panel = Color(0xFF151A22), raised = Color(0xFF1B212B),
     border = Color(0xFF232A35), border2 = Color(0xFF2A3240),
     text = Color(0xFFF2F4F7), muted = Color(0xFFA3ADBB), dim = Color(0xFF7A8494),
-    accent = Color(0xFFFF8A1E), onAccent = Color(0xFF1A1205), accentBg = Color(0xFF2B1A0C),
-    track = Color(0xFF343C4A), glow = Color(0x40FF8A1E),
+    accent = Color(0xFFFF6A1A), onAccent = Color(0xFF1A1205), accentBg = Color(0xFF2B140A),
+    track = Color(0xFF343C4A), glow = Color(0x40FF6A1A),
 )
 
 /** Luces apagadas: contraste alto, para el sol. */
@@ -38,8 +38,8 @@ val ContrastPalette = Palette(
     bg = Color(0xFF000000), panel = Color(0xFF1C2230), raised = Color(0xFF2A3242),
     border = Color(0xFF56627A), border2 = Color(0xFF6E7B94),
     text = Color(0xFFFFFFFF), muted = Color(0xFFDCE2EA), dim = Color(0xFFA9B3C2),
-    accent = Color(0xFFFF8A1E), onAccent = Color(0xFF140A00), accentBg = Color(0xFF4A2A08),
-    track = Color(0xFF6E7B94), glow = Color(0x59FF8A1E),
+    accent = Color(0xFFFF6A1A), onAccent = Color(0xFF140A00), accentBg = Color(0xFF4A2008),
+    track = Color(0xFF6E7B94), glow = Color(0x59FF6A1A),
 )
 
 object Tema {
@@ -68,7 +68,11 @@ object DayNight {
     /** Valor actual ("day", "night" o vacío si la unidad no lo guarda). */
     fun mode(): String = PROPERTIES.map { readProperty(it) }.firstOrNull { it.isNotEmpty() } ?: ""
 
-    fun isNight(): Boolean = mode().equals("night", ignoreCase = true)
+    /**
+     * Decisión del usuario (2026-11-15): siempre contraste alto, como la Radio y el launcher.
+     * `persist.tw.theme.mode` es el tema de la app de fábrica, no las luces (vale siempre "night").
+     */
+    fun isNight(): Boolean = false
 
     /** Texto para la pantalla de diagnóstico. */
     fun describe(): String =
