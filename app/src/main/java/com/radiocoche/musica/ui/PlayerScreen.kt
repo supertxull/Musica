@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -337,7 +338,9 @@ private fun LyricsPanel(vm: MusicViewModel, modifier: Modifier) {
                 val lineH = 62.dp
                 val target = with(LocalDensity.current) { (200.dp - lineH / 2 - lineH * cur).toPx() }
                 val shift by animateFloatAsState(target, tween(400), label = "letra")
-                Column(Modifier.fillMaxWidth().graphicsLayer { translationY = shift }) {
+                // La lista ocupa su altura completa (todas las líneas), aunque el panel sea más bajo;
+                // si no, las líneas que no caben se quedan sin altura y no se ven.
+                Column(Modifier.fillMaxWidth().wrapContentHeight(align = Alignment.Top, unbounded = true).graphicsLayer { translationY = shift }) {
                     lines.forEachIndexed { i, l ->
                         val on = i == cur
                         Box(Modifier.fillMaxWidth().height(lineH).padding(horizontal = 40.dp), contentAlignment = Alignment.Center) {
