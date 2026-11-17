@@ -10,7 +10,7 @@ import androidx.compose.runtime.setValue
 /**
  * Luces del coche. El microcontrolador de la unidad (TopWay TS10) avisa con el mensaje 0x204:
  * arg1 = 1 al encenderlas y 0 al apagarlas (lo mismo que usa la Radio).
- * Se guarda el último estado para arrancar ya con los colores correctos.
+ * Al arrancar no se sabe (null): contraste alto hasta que la unidad diga que están encendidas.
  * Fuera de la unidad (sin `android.tw.john.TWUtil`) no hace nada.
  */
 object CarLights {
@@ -28,8 +28,6 @@ object CarLights {
         this.onChange = onChange
         if (started) return
         started = true
-        val prefs = context.applicationContext.getSharedPreferences("luces", Context.MODE_PRIVATE)
-        if (prefs.contains("on")) on = prefs.getBoolean("on", false)
         try {
             val cls = Class.forName("android.tw.john.TWUtil")
             val util = cls.getConstructor(Int::class.javaPrimitiveType).newInstance(1)
@@ -40,7 +38,6 @@ object CarLights {
                 if (m.what == MSG_LIGHTS) {
                     val v = m.arg1 != 0
                     on = v
-                    prefs.edit().putBoolean("on", v).apply()
                     this.onChange?.invoke()
                 }
                 true
