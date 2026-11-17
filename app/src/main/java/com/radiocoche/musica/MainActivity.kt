@@ -16,6 +16,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
+import com.radiocoche.musica.ui.CarLights
 import com.radiocoche.musica.ui.DayNight
 import com.radiocoche.musica.ui.LibraryScreen
 import com.radiocoche.musica.ui.PlayerScreen
@@ -25,14 +26,6 @@ class MainActivity : ComponentActivity() {
 
     private val vm: MusicViewModel by viewModels()
     private val mainHandler = Handler(Looper.getMainLooper())
-
-    /** Al encender o apagar las luces, la unidad avisa y cambiamos los colores. */
-    private val dayNightReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            DayNight.apply()
-            mainHandler.postDelayed({ DayNight.apply() }, 500)
-        }
-    }
 
     /** Al pinchar o quitar un USB o la tarjeta SD. */
     private val mountReceiver = object : BroadcastReceiver() {
@@ -46,19 +39,11 @@ class MainActivity : ComponentActivity() {
     }
 
 
-    /** Mira el modo día/noche cada pocos segundos mientras la app está a la vista. */
-    private val dayNightPoll = object : Runnable {
-        override fun run() {
-            DayNight.apply()
-            mainHandler.postDelayed(this, DayNight.POLL_MS)
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CarLights.start(this) { DayNight.apply() }
         DayNight.apply()
 
-        ContextCompat.registerReceiver(this, dayNightReceiver, IntentFilter(DayNight.ACTION), ContextCompat.RECEIVER_EXPORTED)
         val mountFilter = IntentFilter().apply {
             addAction(Intent.ACTION_MEDIA_MOUNTED)
             addAction(Intent.ACTION_MEDIA_UNMOUNTED)
@@ -89,21 +74,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        mainHandler.removeCallbacks(dayNightPoll)
-        dayNightPoll.run()
+        DayNight.apply()
         if (hasReadPermission()) {
             if (!vm.hasPermission) vm.onPermission(true) else vm.refreshSources()
         }
     }
 
     override fun onPause() {
-        mainHandler.removeCallbacks(dayNightPoll)
         super.onPause()
     }
 
     override fun onDestroy() {
         mainHandler.removeCallbacksAndMessages(null)
-        runCatching { unregisterReceiver(dayNightReceiver) }
         runCatching { unregisterReceiver(mountReceiver) }
         super.onDestroy()
     }

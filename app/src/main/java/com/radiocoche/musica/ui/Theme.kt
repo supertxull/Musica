@@ -50,54 +50,14 @@ object Tema {
 }
 
 /**
- * Día / noche según las luces del coche.
- *
- * Las unidades TopWay guardan el modo en la propiedad del sistema
- * `persist.tw.theme.mode` o `persist.sys.tw.current.theme.type` ("day" o "night"); a veces avisan con
- * el aviso [ACTION]. Es lo mismo que usan la Radio y el ecualizador de fábrica.
+ * Colores según las luces del coche (ver [CarLights]): luces apagadas = contraste alto;
+ * luces encendidas = los colores oscuros de antes. Si aún no se sabe, contraste.
  */
 object DayNight {
-    const val ACTION = "com.tw.theme.day.night.change"
-
-    /** Propiedades donde la unidad guarda el modo, por orden de preferencia. */
-    val PROPERTIES = listOf("persist.sys.tw.current.theme.type", "persist.tw.theme.mode")
-
-    /** Cada cuánto se vuelve a mirar mientras la app está a la vista (no siempre hay aviso). */
-    const val POLL_MS = 2000L
-
-    /** Valor actual ("day", "night" o vacío si la unidad no lo guarda). */
-    fun mode(): String = PROPERTIES.map { readProperty(it) }.firstOrNull { it.isNotEmpty() } ?: ""
-
-    /**
-     * Decisión del usuario (2026-11-15): siempre contraste alto, como la Radio y el launcher.
-     * `persist.tw.theme.mode` es el tema de la app de fábrica, no las luces (vale siempre "night").
-     */
-    fun isNight(): Boolean = false
-
-    /** Texto para la pantalla de diagnóstico. */
-    fun describe(): String =
-        PROPERTIES.joinToString("  ·  ") { p -> "$p = " + readProperty(p).ifEmpty { "(vacía)" } }
+    fun isNight(): Boolean = CarLights.on == true
 
     fun apply() {
         val next = if (isNight()) NightPalette else ContrastPalette
         if (Tema.p !== next) Tema.p = next
-    }
-
-    private val getter by lazy {
-        runCatching {
-            Class.forName("android.os.SystemProperties").getMethod("get", String::class.java, String::class.java)
-        }.getOrNull()
-    }
-
-    private fun readProperty(name: String): String {
-        val g = getter
-        if (g != null) {
-            val v = runCatching { g.invoke(null, name, "") as String }.getOrNull()
-            if (v != null) return v.trim()
-        }
-        return runCatching {
-            val p = Runtime.getRuntime().exec(arrayOf("getprop", name))
-            p.inputStream.bufferedReader().use { it.readText() }.trim()
-        }.getOrDefault("")
     }
 }
