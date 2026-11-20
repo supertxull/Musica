@@ -64,6 +64,21 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    /**
+     * Órdenes del launcher: durante un aviso de radar la música se silencia (sigue avanzando) y luego vuelve.
+     * En esta unidad el foco de sonido de Android no la para, por eso hace falta una orden directa.
+     * Broadcast "com.radiocoche.musica.CMD" con extra cmd = "mute" | "unmute".
+     */
+    private val commandReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val player = session?.player ?: return
+            when (intent.getStringExtra("cmd")) {
+                "mute" -> player.volume = 0f
+                "unmute" -> player.volume = 1f
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         val player = ExoPlayer.Builder(this)
@@ -85,6 +100,9 @@ class PlaybackService : MediaSessionService() {
             this, screenReceiver,
             IntentFilter().apply { addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_SCREEN_OFF) },
             ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        ContextCompat.registerReceiver(
+            this, commandReceiver, IntentFilter("com.radiocoche.musica.CMD"), ContextCompat.RECEIVER_EXPORTED,
         )
 
         session = MediaSession.Builder(this, player)
@@ -115,6 +133,7 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
         runCatching { unregisterReceiver(screenReceiver) }
+        runCatching { unregisterReceiver(commandReceiver) }
         session?.run {
             player.release()
             release()
