@@ -70,7 +70,9 @@ fun PlayerScreen(vm: MusicViewModel) {
         ) {
             // ---------- Centro: carátula y datos. Se desliza para cambiar de canción ----------
             SwipeArea(vm, Modifier.weight(1f).fillMaxWidth()) {
-                if (vm.showLyrics) {
+                if (vm.btMode) {
+                    BtCenter(vm)
+                } else if (vm.showLyrics) {
                     LyricsPanel(vm, Modifier.weight(1f).height(400.dp))
                 } else {
                     Cover(vm)
@@ -130,7 +132,7 @@ fun PlayerScreen(vm: MusicViewModel) {
             }
 
             // ---------- Barra de progreso ----------
-            ProgressPanel(vm)
+            if (vm.btMode) BtProgress(vm) else ProgressPanel(vm)
 
             // ---------- Barra inferior ----------
             Row(Modifier.fillMaxWidth().height(72.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -139,16 +141,17 @@ fun PlayerScreen(vm: MusicViewModel) {
                 }
                 CarButton(Modifier.weight(1.2f).fillMaxHeight(), panelStyle(), onClick = { vm.cycleSource() }) {
                     val cur = vm.current
-                    if (cur?.kind == Kind.BT) CarIcon(Ic.Bluetooth, 34.dp, p.text, "Fuente: Bluetooth")
+                    if (vm.btMode || cur?.kind == Kind.BT) CarIcon(Ic.Bluetooth, 34.dp, p.text, "Fuente: Bluetooth")
                     else Text(shortLabel(cur?.label), color = p.text, fontSize = 34.sp, fontFamily = Tema.condensed)
                 }
+                val sounding = if (vm.btMode) vm.bt.playing else vm.playing
                 CarButton(
                     Modifier.weight(1.4f).fillMaxHeight(),
-                    if (vm.playing) accentStyle() else panelStyle(),
+                    if (sounding) accentStyle() else panelStyle(),
                     onClick = { vm.togglePlay() },
                 ) {
-                    val tint = if (vm.playing) p.accent else p.text
-                    CarIcon(if (vm.playing) Ic.Pause else Ic.Play, 36.dp, tint, if (vm.playing) "Pausa" else "Reproducir")
+                    val tint = if (sounding) p.accent else p.text
+                    CarIcon(if (sounding) Ic.Pause else Ic.Play, 36.dp, tint, if (sounding) "Pausa" else "Reproducir")
                 }
                 CarButton(Modifier.weight(1f).fillMaxHeight(), panelStyle(), onClick = { vm.openEq() }) {
                     CarIcon(Ic.Eq, 30.dp, p.text, "Ecualizador")
@@ -222,6 +225,68 @@ private fun SwipeArea(vm: MusicViewModel, modifier: Modifier, content: @Composab
             horizontalArrangement = Arrangement.spacedBy(36.dp),
             content = content,
         )
+    }
+}
+
+/** Centro en Bluetooth: símbolo grande en lugar de carátula, nombre del móvil en naranja, título y artista. */
+@Composable
+private fun RowScope.BtCenter(vm: MusicViewModel) {
+    val p = Tema.p
+    val b = vm.bt
+    val shape = RoundedCornerShape(22.dp)
+    Box(Modifier.size(320.dp).clip(shape).background(p.raised).border(1.dp, p.border2, shape), contentAlignment = Alignment.Center) {
+        CarIcon(Ic.Bluetooth, 120.dp, p.accent, "Bluetooth")
+    }
+    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            CarIcon(Ic.Bluetooth, 30.dp, p.accent, "Bluetooth")
+            Text(
+                b.phone.ifEmpty { "Móvil" },
+                color = p.accent, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        key(b.title) {
+            Text(
+                b.title.ifEmpty { "Música del móvil" },
+                color = p.text, fontSize = 76.sp, lineHeight = 90.sp, fontFamily = Tema.condensed,
+                maxLines = 1, softWrap = false,
+                modifier = Modifier.padding(bottom = 4.dp).basicMarquee(
+                    iterations = Int.MAX_VALUE,
+                    initialDelayMillis = 2000,
+                    repeatDelayMillis = 2000,
+                    velocity = 70.dp,
+                ),
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            CarIcon(Ic.Person, 24.dp, p.accent)
+            Text(
+                if (b.title.isEmpty()) "Pon música en el móvil" else b.artist,
+                color = p.text, fontSize = 28.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** Barra de tiempo del Bluetooth: solo se ve (el móvil no deja saltar a un punto). */
+@Composable
+private fun BtProgress(vm: MusicViewModel) {
+    val p = Tema.p
+    val b = vm.bt
+    val dur = b.durationMs
+    val frac = if (dur > 0) (b.positionMs.toFloat() / dur).coerceIn(0f, 1f) else 0f
+    Row(
+        Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(16.dp)).background(p.panel)
+            .border(1.dp, p.border, RoundedCornerShape(16.dp)).padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        Text(if (dur > 0) fmt(b.positionMs) else "", color = p.text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(64.dp))
+        Box(Modifier.weight(1f).height(44.dp), contentAlignment = Alignment.CenterStart) {
+            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(p.track))
+            Box(Modifier.fillMaxWidth(frac).height(6.dp).clip(RoundedCornerShape(3.dp)).background(p.accent))
+        }
+        Text(if (dur > 0) fmt(dur) else "", color = p.muted, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(64.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End)
     }
 }
 

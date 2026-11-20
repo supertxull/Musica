@@ -18,7 +18,7 @@ import androidx.compose.runtime.setValue
  *
  * Dos vías, vale la primera que llegue:
  *  1. Conexión propia con el microcontrolador (se escucha el mismo grupo de mensajes que la Radio).
- *  2. El aviso [ACTION] que mandan las otras apps (Radio, launcher) cuando ellas reciben el 0x204.
+ *  2. El aviso [ACTION] que mandan las otras apps (Radio, Música) cuando ellas reciben el 0x204.
  * Cuando el aviso llega por la vía 1 se reenvía a las otras apps.
  *
  * Fuera de la unidad (sin `android.tw.john.TWUtil`) no hace nada.
@@ -26,20 +26,35 @@ import androidx.compose.runtime.setValue
 object CarLights {
     private const val MSG_LIGHTS = 0x204
     const val ACTION = "com.radiocoche.LIGHTS"
-    private val LISTEN = intArrayOf(0x201, 0x203, MSG_LIGHTS, 0x301)
+    private const val MSG_VOLUME = 0x203   // volumen general: arg1 = nivel (0–30), arg2 = máximo
+    private const val MSG_NOW = 0x9F00      // lo que suena: arg1 = fuente (8 = Bluetooth), arg2 = 1 sonando / 0 en pausa, obj = título
+    private val LISTEN = intArrayOf(0x201, MSG_VOLUME, MSG_LIGHTS, 0x301, MSG_NOW)
     private val OTHERS = listOf("com.radiocoche.radio", "com.radiocoche.launcher")
 
     /** true = encendidas; false = apagadas; null = aún no se sabe. */
     var on by mutableStateOf<Boolean?>(null)
         private set
 
-    /** Estado de la conexión (para pruebas). */
+    /** Volumen general de la unidad (0–30), el del mando. null = aún no se sabe. */
+    var volume: Int? = null
+        private set
+
+    /** La música Bluetooth está sonando (según la unidad). null = aún no se sabe. */
+    var btPlaying by mutableStateOf<Boolean?>(null)
+        private set
+
+    /** Título de la canción Bluetooth según la unidad (mensaje 0x9F00). */
+    var btTitle by mutableStateOf("")
+        private set
+
+    /** Estado de la conexión, para la línea de estado de la ventana de radares. */
     var link by mutableStateOf("sin conexión")
         private set
 
     private var started = false
     private var tw: Any? = null // se guarda para que no se libere
     private var write2: java.lang.reflect.Method? = null
+    private var write3: java.lang.reflect.Method? = null
     private val listeners = mutableListOf<() -> Unit>()
     private val main = Handler(Looper.getMainLooper())
     private var app: Context? = null
@@ -79,12 +94,28 @@ object CarLights {
             }
             cls.getMethod("start").invoke(util)
             val handler = Handler(Looper.getMainLooper()) { m ->
-                if (m.what == MSG_LIGHTS) set(m.arg1 != 0, fromMcu = true)
+                when (m.what) {
+                    MSG_LIGHTS -> set(m.arg1 != 0, fromMcu = true)
+                    MSG_VOLUME -> if (m.arg2 in 1..100 && m.arg1 in 0..m.arg2) volume = m.arg1
+                    MSG_NOW -> {
+                        btPlaying = m.arg1 == 8 && m.arg2 == 1
+                        if (m.arg1 == 8) {
+                            val o = m.obj
+                            val t = when (o) {
+                                is String -> o
+                                is ByteArray -> String(o, Charsets.UTF_8)
+                                else -> null
+                            }
+                            if (t != null) btTitle = t.trim { it <= ' ' || it == '\u0000' }
+                        }
+                    }
+                }
                 true
             }
             cls.getMethod("addHandler", String::class.java, Handler::class.java).invoke(util, "MusicaCoche", handler)
             val int = Int::class.javaPrimitiveType
             write2 = cls.getMethod("write", int, int)
+            write3 = cls.getMethod("write", int, int, int)
             tw = util
             link = "conectado"
             ask()
@@ -120,5 +151,22 @@ object CarLights {
             if (Build.VERSION.SDK_INT >= 33) ctx.registerReceiver(r, IntentFilter(ACTION), Context.RECEIVER_EXPORTED)
             else ctx.registerReceiver(r, IntentFilter(ACTION))
         }
+    }
+
+    /**
+     * Orden directa al microcontrolador con la conexión que ya está abierta (sin abrir ni cerrar nada).
+     * La usa el aviso de radares para quitar y devolver el sonido de la radio al instante.
+     * Devuelve false si no hay conexión (fuera de la unidad).
+     */
+    fun write(what: Int, a1: Int): Boolean {
+        val util = tw ?: return false
+        val m = write2 ?: return false
+        return runCatching { m.invoke(util, what, a1) }.isSuccess
+    }
+
+    fun write(what: Int, a1: Int, a2: Int): Boolean {
+        val util = tw ?: return false
+        val m = write3 ?: return false
+        return runCatching { m.invoke(util, what, a1, a2) }.isSuccess
     }
 }

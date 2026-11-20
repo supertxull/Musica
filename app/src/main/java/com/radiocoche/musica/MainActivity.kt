@@ -70,6 +70,20 @@ class MainActivity : ComponentActivity() {
         }
 
         if (hasReadPermission()) vm.onPermission(true) else askPermission.launch(neededPermissions())
+        handleSource(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleSource(intent)
+    }
+
+    /** El launcher abre Música directamente en Bluetooth con el extra source = "BT". */
+    private fun handleSource(i: Intent?) {
+        if (i?.getStringExtra("source") == "BT") {
+            i.removeExtra("source")
+            vm.openBluetooth()
+        }
     }
 
     override fun onResume() {

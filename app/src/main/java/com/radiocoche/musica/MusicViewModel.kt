@@ -100,6 +100,14 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     var toast by mutableStateOf("")
         private set
 
+    // ---------- Bluetooth ----------
+    /** Música del móvil por Bluetooth (la reproduce la app de fábrica; aquí se ve y se manda). */
+    val bt = com.radiocoche.musica.playback.BtLink(app)
+    /** true: el reproductor muestra y controla la música Bluetooth. */
+    var btMode by mutableStateOf(false)
+        private set
+    private val btHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     // ---------- Letra ----------
     /** Letra de la canción actual, leída del propio archivo (null si no tiene). */
     var lyrics by mutableStateOf<Lyrics?>(null)
@@ -109,7 +117,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     fun toggleLyrics() {
-        if (current?.kind == Kind.BT || now.path.isEmpty()) return
+        if (btMode || current?.kind == Kind.BT || now.path.isEmpty()) return
         showLyrics = !showLyrics
     }
 
@@ -167,6 +175,9 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         connect()
+        bt.start()
+        // Si empieza a sonar el móvil y aquí no suena nada, el reproductor pasa a Bluetooth.
+        bt.onStartedPlaying = { if (!playing) { btMode = true; showLyrics = false } }
         viewModelScope.launch {
             var tick = 0
             while (isActive) {
@@ -176,6 +187,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
                     val d = c.duration
                     if (d != C.TIME_UNSET && d > 0) durationMs = d
                 }
+                if (tick % 2 == 0) bt.tick()
                 tick++
                 if (tick % 20 == 0) savePosition()
                 if (tick % 20 == 10 && hasPermission) refreshSources()
@@ -371,6 +383,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Empieza a sonar una fuente: donde se dejó o, si es nueva, en su primera carpeta con música. */
     private fun startSource(src: Source, autoplay: Boolean) {
+        if (autoplay) leaveBluetooth()
         viewModelScope.launch {
             val saved = withContext(Dispatchers.IO) {
                 runCatching { queueFile(src).readLines().filter { it.isNotBlank() } }.getOrDefault(emptyList())
@@ -415,12 +428,17 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- Controles del reproductor ----------
 
     fun togglePlay() {
+        if (btMode) {
+            bt.playPause()
+            return
+        }
         val c = controller ?: return
         if (c.mediaItemCount == 0) {
             current?.let { startSource(it, true) } ?: showToast("No hay música para reproducir")
             return
         }
         if (c.isPlaying) c.pause() else {
+            bt.pauseIfPlaying()
             if (c.playbackState == Player.STATE_IDLE) c.prepare()
             c.play()
         }
@@ -430,6 +448,10 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Deslizar a la izquierda: siguiente canción (vuelve a la primera al llegar al final). */
     fun swipeNext() {
+        if (btMode) {
+            bt.next()
+            return
+        }
         val c = controller ?: return
         if (c.mediaItemCount == 0) return
         if (c.hasNextMediaItem()) c.seekToNextMediaItem() else c.seekTo(0, 0L)
@@ -437,6 +459,10 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Deslizar a la derecha: canción anterior (siempre la anterior, aunque la actual vaya avanzada). */
     fun swipePrevious() {
+        if (btMode) {
+            bt.previous()
+            return
+        }
         val c = controller ?: return
         if (c.mediaItemCount == 0) return
         if (c.hasPreviousMediaItem()) c.seekToPreviousMediaItem() else c.seekTo(c.mediaItemCount - 1, 0L)
@@ -502,6 +528,18 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     /** Botón Fuente: pasa a la siguiente fuente conectada. */
     fun cycleSource() {
         val list = sources.filter { it.kind != Kind.BT }
+        if (btMode) {
+            // Del Bluetooth se vuelve a la última fuente propia (o la primera conectada).
+            val back = current?.takeIf { c -> list.any { it.id == c.id } } ?: list.firstOrNull()
+            if (back == null) {
+                showToast("No hay otras fuentes conectadas")
+                return
+            }
+            leaveBluetooth()
+            showToast("Fuente: ${back.label}")
+            startSource(back, true)
+            return
+        }
         if (list.size < 2) {
             showToast("No hay otras fuentes conectadas")
             return
@@ -513,8 +551,20 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         startSource(nxt, true)
     }
 
+    /** Fuente Bluetooth: se para la música propia y se pasa el sonido al móvil. */
     fun openBluetooth() {
-        if (!openApp("com.tw.bt", "com.tw.btmusic", "com.android.bluetooth")) showToast("No encuentro la app de Bluetooth")
+        controller?.pause()
+        savePosition()
+        btMode = true
+        showLyrics = false
+        screen = Screen.PLAYER
+        bt.takeOver(btHandler)
+    }
+
+    private fun leaveBluetooth() {
+        if (!btMode) return
+        btMode = false
+        bt.pauseIfPlaying()
     }
 
     fun openEq() {
