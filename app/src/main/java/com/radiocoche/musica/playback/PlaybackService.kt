@@ -79,6 +79,9 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    private var pausedBySource = false
+    private var pausedBySourceAt = 0L
+
     override fun onCreate() {
         super.onCreate()
         val player = ExoPlayer.Builder(this)
@@ -91,8 +94,27 @@ class PlaybackService : MediaSessionService() {
             )
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
+        // Fuente de sonido de la unidad (como la Música de fábrica): al sonar se pide la fuente 3;
+        // si otra fuente se la queda (radio, Bluetooth, llamada…), se pausa, y si vuelve pronto, se reanuda.
+        com.radiocoche.musica.ui.CarLights.start(applicationContext)
+        com.radiocoche.musica.ui.CarLights.onSource = { src ->
+            if (src != SRC_MUSIC && player.isPlaying) {
+                pausedBySource = true
+                pausedBySourceAt = SystemClock.elapsedRealtime()
+                player.pause()
+            } else if (src == SRC_MUSIC && pausedBySource) {
+                pausedBySource = false
+                if (SystemClock.elapsedRealtime() - pausedBySourceAt < 10 * 60_000L) player.play()
+            }
+        }
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (isPlaying) {
+                    pausedBySource = false
+                    if (com.radiocoche.musica.ui.CarLights.source != SRC_MUSIC) {
+                        com.radiocoche.musica.ui.CarLights.write(0x9E11, 192, SRC_MUSIC)
+                    }
+                }
                 lastPlayingAt = SystemClock.elapsedRealtime()
             }
         })
@@ -140,5 +162,10 @@ class PlaybackService : MediaSessionService() {
         }
         session = null
         super.onDestroy()
+    }
+
+    private companion object {
+        /** Fuente "música de Android" del microcontrolador (la Música de fábrica usa la misma). */
+        const val SRC_MUSIC = 3
     }
 }

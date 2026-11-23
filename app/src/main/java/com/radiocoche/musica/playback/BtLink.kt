@@ -110,7 +110,7 @@ class BtLink(private val ctx: Context) {
      * y, medio segundo después, pide que suene si estaba en pausa.
      */
     fun takeOver(handler: android.os.Handler) {
-        CarLights.write(0x9E11, 192, 136)
+        CarLights.write(0x9E11, 192, 8)
         handler.postDelayed({ command(5) }, 600)
         query()
     }
