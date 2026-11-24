@@ -177,7 +177,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         connect()
         bt.start()
         // Si empieza a sonar el móvil y aquí no suena nada, el reproductor pasa a Bluetooth.
-        bt.onStartedPlaying = { if (!playing) { btMode = true; showLyrics = false } }
+        bt.onStartedPlaying = { if (!playing && controller?.playWhenReady != true) { btMode = true; showLyrics = false } }
         viewModelScope.launch {
             var tick = 0
             while (isActive) {
@@ -440,6 +440,8 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         if (c.isPlaying) c.pause() else {
             bt.pauseIfPlaying()
             if (c.playbackState == Player.STATE_IDLE) c.prepare()
+            // Si se quedó en silencio por un aviso o una llamada, al dar al play vuelve el sonido.
+            c.volume = 1f
             c.play()
         }
     }

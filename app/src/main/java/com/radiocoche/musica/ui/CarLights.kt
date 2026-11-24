@@ -106,17 +106,11 @@ object CarLights {
                 when (m.what) {
                     MSG_LIGHTS -> set(m.arg1 != 0, fromMcu = true)
                     MSG_VOLUME -> if (m.arg2 in 1..100 && m.arg1 in 0..m.arg2) volume = m.arg1
-                    MSG_SOURCE_NOW -> {
-                        source = m.arg1 and 0x7F
-                        onSource?.invoke(m.arg1 and 0x7F)
-                    }
+                    // Solo se apunta (sin confirmar en el coche qué significa); no se actúa con él.
+                    MSG_SOURCE_NOW -> source = m.arg1 and 0x7F
                     MSG_NOW -> {
-                        val was = btPlaying == true
-                        btPlaying = m.arg1 == 8 && m.arg2 == 1
-                        // Play en el móvil: la unidad no cambia sola de fuente; se le pide el Bluetooth (fuente 8).
-                        if (btPlaying == true && !was && source != 8) {
-                            runCatching { write3?.invoke(tw, 0x9E11, 192, 8) }
-                        }
+                        // Solo cuenta lo que dice del Bluetooth (arg1 = 8). Pedir la fuente lo hace solo el launcher.
+                        if (m.arg1 == 8) btPlaying = m.arg2 == 1
                         if (m.arg1 == 8) {
                             val o = m.obj
                             val t = when (o) {
